@@ -1,0 +1,29 @@
+# --- Personal data: head/ear scans and everything generated from them ---
+*.dat
+*.sofa
+sofa/
+# exported measurement curves, plots and notes made from scans
+*-DFHRTF-*.txt
+*-DF-asstored-*.txt
+*-assumptions.md
+*-hrtf*.csv
+*-hrtf*.png
+watch-out/
+
+# --- Swift / Xcode build artifacts ---
+.build/
+dist/
+.swiftpm/
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- Logs from build-app.sh / validate.sh ---
+*.log
+
+# --- macOS ---
+.DS_Store
