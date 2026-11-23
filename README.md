@@ -139,45 +139,47 @@ consistent (IR correlation ≈ 0.986, delays within ≈ 0.17 samples RMS).
 
 ## How personal is Apple's personalized HRTF?
 
-This compares four scans of one listener (A), one profile each from two more listeners (B and C), and
-Apple's generic HRTF that ships with macOS (`HRIR_General.ir` in AudioDSP.component). The profiles
-were made on three different iPhones, from 2024 to 2026. The comparison suggests Personalized
-Spatial Audio makes real but modest changes.
+This compares four scans of one listener (A), one profile each from three more listeners (B, C and
+D), and Apple's generic HRTF that ships with macOS (`HRIR_General.ir` in AudioDSP.component). The
+profiles were made on four different iPhones, from 2024 to 2026. The comparison suggests
+Personalized Spatial Audio makes real but modest changes.
 
 **Most of every profile is a shared base head.** Each profile's directional curves (each direction
 relative to that profile's own diffuse field) sit 2.7–3.1 dB RMS from Apple's generic head. But all
-three move away from it in much the same way: the deviations are 66–82% correlated, and about 84%
-of their energy is common to all three listeners. What's individual on top of that base is about
-1.0–1.4 dB RMS. Listeners differ from each other by 1.7–2.6 dB RMS, while repeat scans of listener
-A differ by 1.0–1.6 dB (1.2 dB on average). So the difference between two people is only about 1.5–2
-times the scan-to-scan noise. It's largest above 5 kHz, where the pinna shapes the response.
+four move away from it in much the same way: the deviations are 66–82% correlated, and about 82% of
+their energy is common to all four listeners. What's individual on top of that base is about
+1.0–1.5 dB RMS. Listeners differ from each other by 1.6–2.6 dB RMS (2.0 dB on average), while repeat
+scans of listener A differ by 1.0–1.6 dB (1.2 dB on average). So the difference between two people
+is only about 1.5–2 times the scan-to-scan noise. It's largest above 5 kHz, where the pinna shapes
+the response.
 
-![RMS difference of the directional curves over the whole sphere, by frequency: listener vs Apple's generic HRTF is highest at about 2.5-3.5 dB, listener vs listener is 0.9-2.8 dB, and repeat scans of the same listener are lowest at 0.6-1.7 dB](Figures/directional-differences.png)
+![RMS difference of the directional curves over the whole sphere, by frequency: listener vs Apple's generic HRTF is highest at about 2.5-3.5 dB, listener vs listener is 0.9-2.6 dB, and repeat scans of the same listener are lowest at 0.6-1.7 dB](Figures/directional-differences.png)
 
 **The clearest individual features are the pinna notch and head size.** The first pinna notch is
-the main cue for elevation and front/back. For listener A, it sits at 8.2–10.1 kHz in front and at
-±30° in all four scans. For B it's at 6.8–7.1 kHz, for C at 7.6–8.4 kHz, and for the generic head at
-6.3–7.5 kHz. The ITD at 90° ranges from 629 to 703 µs across the three listeners (about 11%), and
-is 721 µs for the generic head.
+the main cue for elevation and front/back. In front and at ±30°, it falls at 6.8–7.1 kHz for listener
+B, 7.6–8.4 kHz for C, 8.3–9.8 kHz for D and 8.2–10.1 kHz across A's four scans. For the generic head it
+falls at 6.3–7.5 kHz. A's scans move it by up to about 1.5 kHz, so only differences larger than that,
+such as A or D against B, clearly stand out from scan noise. The ITD at 90° ranges from 629 to 703 µs
+across the four listeners (about 11%), and is 721 µs for the generic head.
 
-![Straight ahead, left ear, each profile relative to its own diffuse field: the three listeners share a larger 2-4 kHz bump than the generic head, and their 6-10 kHz notch sits at different frequencies](Figures/front-direction.png)
+![Straight ahead, left ear, one panel per listener, each profile relative to its own diffuse field and compared with Apple's generic head: every listener has a larger 2-4 kHz bump than the generic head, and the 6-10 kHz notch sits at a different frequency for each](Figures/front-direction.png)
 
-![First pinna notch frequency, left ear, in front and at 30° left and right: listener A's four scans cluster at 8.2-10.1 kHz, listener B at 6.8-7.1 kHz, listener C at 7.6-8.4 kHz, and Apple's generic head at 6.3-7.5 kHz](Figures/pinna-notch.png)
+![First pinna notch frequency, left ear, in front and at 30° left and right, one row per listener: listener A's four scans spread over 8.2-10.1 kHz, B sits at 6.8-7.1 kHz, C at 7.6-8.4 kHz, D at 8.3-9.8 kHz, and Apple's generic head at 6.3-7.5 kHz](Figures/pinna-notch.png)
 
 **A different HRTF dataset is much further away.** At its 27 directions, an unrelated third-party
 HRTF (3D Sound Labs, as shipped with VLC) differs from each profile by 4.4–4.6 dB RMS. The listeners
-differ from each other by 1.8–2.6 dB at the same directions. That suggests the per-person variation in
+differ from each other by 1.6–2.6 dB at the same directions. That suggests the per-person variation in
 Apple's profiles is smaller than real head-to-head differences. But the datasets were measured and
-processed differently, and only three people were compared.
+processed differently, and only four people were compared.
 
 **There is no personal diffuse-field response.** The stored HRIRs are diffuse-field equalized, so they
 carry no absolute diffuse-field response. The only absolute curve in the file is the 64-point CTF. It
-agrees within 1.8 dB across all three listeners and all scans, and peaks at 7.5–7.9 dB near 3.4 kHz
-for everyone. Apple's generic HRTFs on macOS are diffuse-field equalized too and have no CTF at all.
-That's why this tool doesn't export a diffuse-field HRTF: it would effectively be a population curve,
-not a personal one. A personal diffuse-field or eardrum target needs a real measurement, such as an
+agrees within 1.8 dB across all four listeners and all scans, and peaks at 7.5–8.0 dB near 3.4 kHz for
+everyone. Apple's generic HRTFs on macOS are diffuse-field equalized too and have no CTF at all. That's
+why this tool doesn't export a diffuse-field HRTF: it would effectively be a population curve, not a
+personal one. A personal diffuse-field or eardrum target needs a real measurement, such as an
 audiologist's real-ear (REUR/REUG) measurement or in-ear microphones. For BRIR use this matters less:
-tools like ASH Toolset diffuse-field-calibrate each dataset anyway, so what reaches the BRIR is
-exactly the personal directional and timing part described above.
+tools like ASH Toolset diffuse-field-calibrate each dataset anyway, so what reaches the BRIR is exactly
+the personal directional and timing part described above.
 
-![Apple's stored CTF, left ear, for listener A's four scans and listeners B and C: the curves overlap almost completely, peaking near 3.4 kHz and rolling off above 5 kHz](Figures/ctf-across-listeners.png)
+![Apple's stored CTF, left ear, for listener A's four scans and listeners B, C and D: the curves overlap almost completely, peaking near 3.4 kHz and rolling off above 5 kHz](Figures/ctf-across-listeners.png)
