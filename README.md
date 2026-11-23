@@ -39,6 +39,8 @@ open dist/HRTFToSOFA.app       # drag .dat files in, press Convert
 dist/hrtf2sofa ~/hrtf-scans/*.dat -o ../sofa --listener YourName
 ```
 
+![Convert tab: drop .dat files in, choose options (bake ITD, mirror ear mapping, listener name, source distance, output folder) and press Convert](Screenshots/convert-tab.png)
+
 Needs Xcode or the Command Line Tools. There are no third-party dependencies: the HDF5/netCDF-4
 writer is built in (`Sources/HRTFKit/HDF5Writer.swift`).
 
@@ -59,6 +61,8 @@ measurement is weighted by its 5° latitude-band area divided by the points in i
 It has a hover crosshair synced across both ears with a value readout, smoothing from none to
 1/3 octave, and PNG/CSV export.
 `hrtf2sofa … --plot DIR [--smoothing N]` writes the same plots and CSVs from the command line.
+
+![Visualize tab with "Add back Apple's CTF" on and the eardrum reference point selected: left- and right-ear magnitude responses for front, 45° left, 45° down, 45° up and the diffuse field](Screenshots/visualize-tab-eardrum.png)
 
 - As stored, the data is **diffuse-field equalized**: the diffuse-field curve is within about 0–3 dB of flat.
 - **"Add back Apple's CTF"** adds the per-ear `CTF` from the file's metadata (2 × 64 values in dB
