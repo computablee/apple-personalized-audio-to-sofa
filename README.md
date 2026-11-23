@@ -36,7 +36,7 @@ ears, so treat them (and the SOFA files made from them) as personal data. This r
 cd HRTFToSOFA
 ./build-app.sh                 # -> dist/HRTFToSOFA.app and dist/hrtf2sofa
 open dist/HRTFToSOFA.app       # drag .dat files in, press Convert
-dist/hrtf2sofa ~/hrtf-scans/*.dat -o ../sofa --listener YourName
+dist/hrtf2sofa ~/hrtf-scans/*.dat -o sofa --listener YourName   # sofa/ is gitignored
 ```
 
 ![Convert tab: drop .dat files in, choose options (bake ITD, mirror ear mapping, listener name, source distance, output folder) and press Convert](Screenshots/convert-tab.png)
@@ -139,26 +139,45 @@ consistent (IR correlation ≈ 0.986, delays within ≈ 0.17 samples RMS).
 
 ## How personal is Apple's personalized HRTF?
 
-Comparing four scans of one head, a profile from a second person, and Apple's generic
-HRTF that ships with macOS (`HRIR_General.ir` in AudioDSP.component) suggests that
-Personalized Spatial Audio makes real but modest changes. Both personalized profiles sit
-about 3 dB RMS from Apple's generic head, but they move away from it in nearly the same
-way (deviations ~87% correlated), so most of each profile is a common base head. The
-individual part on top of that base is about 1 dB RMS. That's only slightly more than the
-~1.3 dB that repeat scans of the same head differ by. The clearest repeatable individual
-features are the first pinna notch moving in frequency (consistently 1.5–2.5 kHz higher for
-one listener than the other across all scans) and head-size-dependent ITD (~8% different
-between the two). For comparison, an unrelated third-party HRTF dataset differs from these
-profiles by ~4.6 dB RMS. That suggests the per-person variation in Apple's profiles is
-smaller than real head-to-head differences, but the datasets were measured differently and
-only two people were compared.
+This compares four scans of one listener (A), one profile each from two more listeners (B and C), and
+Apple's generic HRTF that ships with macOS (`HRIR_General.ir` in AudioDSP.component). The profiles
+were made on three different iPhones, from 2024 to 2026. The comparison suggests Personalized
+Spatial Audio makes real but modest changes.
 
-The stored HRIRs are diffuse-field equalized, so they carry no absolute diffuse-field
-response. The only absolute curve in the file is the 64-point CTF, and it's nearly
-identical across people, scans and phones (within ~1.5 dB). Apple's generic HRTFs on macOS
-are diffuse-field equalized too and have no CTF at all. That's why this tool doesn't export a
-diffuse-field HRTF: it would effectively be a population curve, not a personal one. A
-personal diffuse-field or eardrum target needs a real measurement, such as an audiologist's
-real-ear (REUR/REUG) measurement or in-ear microphones. For BRIR use this matters less:
-tools like ASH Toolset diffuse-field-calibrate each dataset anyway, so what reaches the
-BRIR is exactly the personal directional and timing part described above.
+**Most of every profile is a shared base head.** Each profile's directional curves (each direction
+relative to that profile's own diffuse field) sit 2.7–3.1 dB RMS from Apple's generic head. But all
+three move away from it in much the same way: the deviations are 66–82% correlated, and about 84%
+of their energy is common to all three listeners. What's individual on top of that base is about
+1.0–1.4 dB RMS. Listeners differ from each other by 1.7–2.6 dB RMS, while repeat scans of listener
+A differ by 1.0–1.6 dB (1.2 dB on average). So the difference between two people is only about 1.5–2
+times the scan-to-scan noise. It's largest above 5 kHz, where the pinna shapes the response.
+
+![RMS difference of the directional curves over the whole sphere, by frequency: listener vs Apple's generic HRTF is highest at about 2.5-3.5 dB, listener vs listener is 0.9-2.8 dB, and repeat scans of the same listener are lowest at 0.6-1.7 dB](Figures/directional-differences.png)
+
+**The clearest individual features are the pinna notch and head size.** The first pinna notch is
+the main cue for elevation and front/back. For listener A, it sits at 8.2–10.1 kHz in front and at
+±30° in all four scans. For B it's at 6.8–7.1 kHz, for C at 7.6–8.4 kHz, and for the generic head at
+6.3–7.5 kHz. The ITD at 90° ranges from 629 to 703 µs across the three listeners (about 11%), and
+is 721 µs for the generic head.
+
+![Straight ahead, left ear, each profile relative to its own diffuse field: the three listeners share a larger 2-4 kHz bump than the generic head, and their 6-10 kHz notch sits at different frequencies](Figures/front-direction.png)
+
+![First pinna notch frequency, left ear, in front and at 30° left and right: listener A's four scans cluster at 8.2-10.1 kHz, listener B at 6.8-7.1 kHz, listener C at 7.6-8.4 kHz, and Apple's generic head at 6.3-7.5 kHz](Figures/pinna-notch.png)
+
+**A different HRTF dataset is much further away.** At its 27 directions, an unrelated third-party
+HRTF (3D Sound Labs, as shipped with VLC) differs from each profile by 4.4–4.6 dB RMS. The listeners
+differ from each other by 1.8–2.6 dB at the same directions. That suggests the per-person variation in
+Apple's profiles is smaller than real head-to-head differences. But the datasets were measured and
+processed differently, and only three people were compared.
+
+**There is no personal diffuse-field response.** The stored HRIRs are diffuse-field equalized, so they
+carry no absolute diffuse-field response. The only absolute curve in the file is the 64-point CTF. It
+agrees within 1.8 dB across all three listeners and all scans, and peaks at 7.5–7.9 dB near 3.4 kHz
+for everyone. Apple's generic HRTFs on macOS are diffuse-field equalized too and have no CTF at all.
+That's why this tool doesn't export a diffuse-field HRTF: it would effectively be a population curve,
+not a personal one. A personal diffuse-field or eardrum target needs a real measurement, such as an
+audiologist's real-ear (REUR/REUG) measurement or in-ear microphones. For BRIR use this matters less:
+tools like ASH Toolset diffuse-field-calibrate each dataset anyway, so what reaches the BRIR is
+exactly the personal directional and timing part described above.
+
+![Apple's stored CTF, left ear, for listener A's four scans and listeners B and C: the curves overlap almost completely, peaking near 3.4 kHz and rolling off above 5 kHz](Figures/ctf-across-listeners.png)
