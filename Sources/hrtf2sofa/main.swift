@@ -10,10 +10,7 @@ usage: hrtf2sofa [options] <file.dat>...
   --distance M         source distance in metres (default 1.0)
   --listener NAME      ListenerShortName (default AppleHRTF)
   --date "Y-m-d H:M:S" fixed creation date (reproducible output)
-  --plot DIR           also write HRTF plots (PNG), curves (CSV) and diffuse-field
-                       measurement files (<name>-DFHRTF-L/R/LR-avg.txt, 1/48 oct) to DIR,
-                       as stored, with Apple's CTF added back, and at the eardrum
-                       (population-average ear-canal correction; see *-assumptions.md)
+  --plot DIR           also write HRTF plots (<name>-hrtf.png) and curves (<name>-hrtf.csv) to DIR
   --smoothing N        1/N-octave smoothing for plots (default 12, 0 = none)
   --custom AZ,EL       add a custom-direction curve to the plots (SOFA convention:
                        azimuth 0 = front, 90 = left, 270 = right; elevation -90..90)
@@ -76,27 +73,15 @@ func runCLI() -> Int32 {
                 try FileManager.default.createDirectory(at: pd, withIntermediateDirectories: true)
                 let h = try AppleHRTF.load(url: input)
                 let base = input.deletingPathExtension().lastPathComponent
-                let variants: [(Bool, HRTFAnalysis.ReferencePoint, String)] = [
-                    (false, .canalEntrance, "-hrtf"), (true, .canalEntrance, "-hrtf-ctf"), (true, .eardrum, "-hrtf-eardrum"),
-                ]
-                for (addCTF, reference, suffix) in variants {
-                    var ao = HRTFAnalysis.Options()
-                    ao.smoothing = smoothing
-                    ao.mirror = opts.mirror
-                    ao.addCTF = addCTF
-                    ao.reference = reference
-                    ao.custom = custom
-                    let r = HRTFAnalysis.analyze(h, options: ao)
-                    let stem = base + suffix
-                    try r.csv().write(to: pd.appendingPathComponent(stem + ".csv"), atomically: true, encoding: .utf8)
-                    try HRTFPlotExport.writePNG(r, to: pd.appendingPathComponent(stem + ".png"))
-                    print("  plot -> \(pd.appendingPathComponent(stem + ".png").path)")
-                    let dfStem = HRTFAnalysis.diffuseFieldStem(base, options: ao)
-                    for f in HRTFAnalysis.diffuseFieldMeasurements(h, options: ao) {
-                        try f.text.write(to: pd.appendingPathComponent("\(dfStem)-\(f.suffix).txt"), atomically: true, encoding: .utf8)
-                    }
-                    try HRTFAnalysis.assumptions(ao).write(to: pd.appendingPathComponent("\(dfStem)-assumptions.md"), atomically: true, encoding: .utf8)
-                }
+                var ao = HRTFAnalysis.Options()
+                ao.smoothing = smoothing
+                ao.mirror = opts.mirror
+                ao.custom = custom
+                let r = HRTFAnalysis.analyze(h, options: ao)
+                let stem = base + "-hrtf"
+                try r.csv().write(to: pd.appendingPathComponent(stem + ".csv"), atomically: true, encoding: .utf8)
+                try HRTFPlotExport.writePNG(r, to: pd.appendingPathComponent(stem + ".png"))
+                print("  plot -> \(pd.appendingPathComponent(stem + ".png").path)")
             }
         } catch {
             failures += 1

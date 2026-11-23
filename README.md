@@ -71,7 +71,15 @@ The y-axis range is fixed per file and setting, and it covers every measured dir
 - `hrtf2sofa … --plot DIR [--smoothing N] [--custom AZ,EL]` writes the same plots and CSVs from the
   command line.
 
-![Visualize tab with "Add back Apple's CTF" on and the eardrum reference point selected: horizontal-plane (front, 45° left, 45° right) and median-plane (front, 45° up, 45° down) magnitude responses for each ear, with the diffuse field, and the direction picker on the left](Screenshots/visualize-tab.png)
+- The curves are shown as stored. The data is **diffuse-field equalized**, so the diffuse-field curve is
+  within about 0–3 dB of flat and the directional curves show each direction relative to it.
+- The file's metadata also has a per-ear `CTF` (2 × 64 values in dB at k × 375 Hz) that looks like the
+  removed diffuse-field response. It is nearly identical across people (see
+  [How personal is Apple's personalized HRTF?](#how-personal-is-apples-personalized-hrtf)), so the app
+  doesn't use it and doesn't export a diffuse-field HRTF.
+- `reference/analyze_hrtf.py` is the reference for these curves. The Swift curves match it to within 0.0001 dB.
+
+![Visualize tab: smoothing and mirror options, the custom-direction controls, the direction picker on the left, and horizontal-plane (front, 45° left, 45° right) and median-plane (front, 45° up, 45° down) magnitude responses for each ear with the diffuse field, shown as stored](Screenshots/visualize-tab.png)
 
 ### Direction picker
 
@@ -82,22 +90,6 @@ requested one, plus a plain-language description such as "behind, right, below".
 convention: 0° is front, 90° left, 180° behind and 270° (or −90°) right.
 
 ![Dragging the direction picker: the Custom direction panel updates in real time as the azimuth and elevation change](Screenshots/visualize-direction-picker.gif)
-
-- As stored, the data is **diffuse-field equalized**: the diffuse-field curve is within about 0–3 dB of flat.
-- **"Add back Apple's CTF"** adds the per-ear `CTF` from the file's metadata (2 × 64 values in dB
-  at k × 375 Hz). With it added back, the diffuse field takes on the textbook shape (≈ +9 dB near
-  3 kHz, rolling off above about 5 kHz), which strongly suggests the CTF is the removed
-  diffuse-field response. Apple doesn't document this; treat it as an interpretation.
-- `reference/analyze_hrtf.py` is the reference for these curves. The Swift curves match it to within 0.0001 dB.
-
-### Eardrum reference (diffuse-field HRTF at the eardrum)
-
-The Visualize tab has a **Reference point** picker, and the CLI writes `*-DFHRTF-eardrum-*.txt` alongside the other plot files.
-
-- **Ear-canal entrance (as computed):** Apple's data, assumed to be referenced to the blocked ear-canal entrance, because the scan can't see the ear canal.
-- **Eardrum:** adds ΔL_DF(eardrum) − ΔL_DF(blocked entrance) from Hammershøi & Møller (2008), *Acta Acustica united with Acustica* 94, Table II. These are third-octave means of published human data from 100 Hz to 16 kHz; the correction is about +9 dB near 2.5 kHz. Use this option to compare against 711-coupler or B&K 5128 (DRP) measurements.
-
-The eardrum correction is a **population average, not your own ear canal**. Above about 8 kHz it is rough: the same correction derived from the table's free-field columns differs by up to 8 dB there. On a test scan, the eardrum result matches the published human eardrum mean within about 1 dB from 1 to 3.15 kHz, and sits 3–4 dB below it above 4 kHz; that remaining gap is not corrected. Every export writes a `<name>-assumptions.md` file listing all of the assumptions, and the app shows the same text under **Method & assumptions…**.
 
 ## What's in the .dat
 
@@ -144,3 +136,29 @@ consistent (IR correlation ≈ 0.986, delays within ≈ 0.17 samples RMS).
 - Every string attribute must be ≤ 64 bytes; libmysofa rejects larger datatypes. Long values are truncated.
 - Group links must use dense storage (fractal heap + v2 B-tree). Compact link messages are rejected.
 - Object header v2 only. No float-typed attributes.
+
+## How personal is Apple's personalized HRTF?
+
+Comparing four scans of one head, a profile from a second person, and Apple's generic
+HRTF that ships with macOS (`HRIR_General.ir` in AudioDSP.component) suggests that
+Personalized Spatial Audio makes real but modest changes. Both personalized profiles sit
+about 3 dB RMS from Apple's generic head, but they move away from it in nearly the same
+way (deviations ~87% correlated), so most of each profile is a common base head. The
+individual part on top of that base is about 1 dB RMS. That's only slightly more than the
+~1.3 dB that repeat scans of the same head differ by. The clearest repeatable individual
+features are the first pinna notch moving in frequency (consistently 1.5–2.5 kHz higher for
+one listener than the other across all scans) and head-size-dependent ITD (~8% different
+between the two). For comparison, an unrelated third-party HRTF dataset differs from these
+profiles by ~4.6 dB RMS. That suggests the per-person variation in Apple's profiles is
+smaller than real head-to-head differences, but the datasets were measured differently and
+only two people were compared.
+
+The stored HRIRs are diffuse-field equalized, so they carry no absolute diffuse-field
+response. The only absolute curve in the file is the 64-point CTF, and it's nearly
+identical across people, scans and phones (within ~1.5 dB). Apple's generic HRTFs on macOS
+are diffuse-field equalized too and have no CTF at all. That's why this tool doesn't export a
+diffuse-field HRTF: it would effectively be a population curve, not a personal one. A
+personal diffuse-field or eardrum target needs a real measurement, such as an audiologist's
+real-ear (REUR/REUG) measurement or in-ear microphones. For BRIR use this matters less:
+tools like ASH Toolset diffuse-field-calibrate each dataset anyway, so what reaches the
+BRIR is exactly the personal directional and timing part described above.

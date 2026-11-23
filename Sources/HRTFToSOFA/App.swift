@@ -216,20 +216,6 @@ final class VizModel: ObservableObject {
     @Published var file: URL? = nil
     @Published var smoothing: Double = 12 { didSet { recompute() } }
     @Published var mirror = false { didSet { recompute() } }
-    @Published var addCTF = false {
-        didSet {
-            if !addCTF && reference == .eardrum { reference = .canalEntrance }
-            recompute()
-        }
-    }
-    /// Eardrum reference implies the CTF is added back (enforced here and in HRTFKit).
-    @Published var reference: HRTFAnalysis.ReferencePoint = .canalEntrance {
-        didSet {
-            if reference == .eardrum && !addCTF { addCTF = true }
-            recompute()
-        }
-    }
-    @Published var showAssumptions = false
     @Published var customEnabled = false { didSet { applyCustom() } }
     /// SOFA convention: 0° front, 90° left, 180° behind, 270° right (negative values wrap, e.g. −90° = right).
     @Published var customAzimuth: Double = 135 { didSet { if customEnabled { applyCustom() } } }
@@ -262,8 +248,6 @@ final class VizModel: ObservableObject {
         var o = HRTFAnalysis.Options()
         o.smoothing = smoothing
         o.mirror = mirror
-        o.addCTF = addCTF
-        o.reference = reference
         if customEnabled { o.custom = HRTFAnalysis.Direction(azimuth: customAzimuth, elevation: customElevation) }
         return o
     }
@@ -333,44 +317,6 @@ final class VizModel: ObservableObject {
         }
     }
 
-    /// Writes the diffuse-field curve as EQ-software measurement files (<stem>-L.txt, -R.txt, -LR-avg.txt).
-    func exportDiffuseField() {
-        guard let h = hrtf else { return }
-        let o = options
-        let base = file?.deletingPathExtension().lastPathComponent ?? "hrtf"
-        let p = NSSavePanel()
-        p.nameFieldStringValue = HRTFAnalysis.diffuseFieldStem(base, options: o)
-        p.message = reference == .eardrum
-            ? "Saves the EARDRUM diffuse-field HRTF (Apple data + population-average ear canal) as <name>-L.txt, -R.txt, -LR-avg.txt and <name>-assumptions.md"
-            : addCTF
-            ? "Saves the diffuse-field HRTF at the ear-canal entrance (CTF added back) as <name>-L.txt, -R.txt, -LR-avg.txt and <name>-assumptions.md"
-            : "CTF is off: this exports the near-flat diffuse field of the stored (equalized) data. Turn on \"Add back Apple's CTF\" or choose the eardrum reference for the actual diffuse-field HRTF."
-        p.prompt = "Export"
-        guard p.runModal() == .OK, let u = p.url else { return }
-        let dir = u.deletingLastPathComponent()
-        var stem = u.lastPathComponent
-        if stem.lowercased().hasSuffix(".txt") { stem = String(stem.dropLast(4)) }
-        busy = true
-        Task {
-            let files = await Task.detached(priority: .userInitiated) { HRTFAnalysis.diffuseFieldMeasurements(h, options: o) }.value
-            busy = false
-            do {
-                var written: [URL] = []
-                for f in files {
-                    let url = dir.appendingPathComponent("\(stem)-\(f.suffix).txt")
-                    try f.text.write(to: url, atomically: true, encoding: .utf8)
-                    written.append(url)
-                }
-                let notes = dir.appendingPathComponent("\(stem)-assumptions.md")
-                try HRTFAnalysis.assumptions(o).write(to: notes, atomically: true, encoding: .utf8)
-                written.append(notes)
-                NSWorkspace.shared.activateFileViewerSelecting(written)
-            } catch {
-                self.error = "Export failed: \(error.localizedDescription)"
-            }
-        }
-    }
-
     func exportCSV() {
         guard let r = result else { return }
         let p = NSSavePanel()
@@ -395,9 +341,6 @@ struct VisualizeView: View {
                 if model.busy { ProgressView().controlSize(.small) }
                 Button("Export PNG…") { model.exportPNG() }.disabled(model.result == nil)
                 Button("Export CSV…") { model.exportCSV() }.disabled(model.result == nil)
-                Button("Export DF HRTF (.txt)…") { model.exportDiffuseField() }
-                    .disabled(model.result == nil)
-                    .help("Diffuse-field curve as frequency/dB measurement files (1/48 octave, 20 Hz-20 kHz) for EQ software: left, right and both-ear average. Uses the current smoothing, mirror and CTF settings.")
             }
             HStack(spacing: 18) {
                 Picker("Smoothing", selection: $model.smoothing) {
@@ -408,30 +351,7 @@ struct VisualizeView: View {
                     Text("1/3 octave").tag(3.0)
                 }
                 .frame(width: 220)
-                Toggle("Add back Apple's CTF (undo diffuse-field EQ)", isOn: $model.addCTF)
-                    .help("Apple stores a per-ear 'CTF' alongside the filters. It looks like the diffuse-field response that was removed from this data; adding it back shows the un-equalized HRTF. This is an interpretation, not documented by Apple.")
                 Toggle("Mirror ear mapping", isOn: $model.mirror)
-                Spacer()
-            }
-            HStack(spacing: 12) {
-                Picker("Reference point", selection: $model.reference) {
-                    ForEach(HRTFAnalysis.ReferencePoint.allCases, id: \.self) { r in
-                        Text(r.label).tag(r)
-                    }
-                }
-                .frame(width: 470)
-                .help("Eardrum adds a published population-average ear-canal correction (Hammershøi & Møller 2008, Table II) so curves are comparable with eardrum-referenced rigs such as 711 couplers or a B&K 5128. It is not your own ear canal.")
-                Button("Method & assumptions…") { model.showAssumptions = true }
-                    .popover(isPresented: $model.showAssumptions, arrowEdge: .bottom) {
-                        ScrollView {
-                            Text(HRTFAnalysis.assumptions(model.options))
-                                .font(.callout)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(16)
-                        }
-                        .frame(width: 560, height: 460)
-                    }
                 Spacer()
             }
             HStack(spacing: 10) {
@@ -447,12 +367,6 @@ struct VisualizeView: View {
                 Spacer()
             }
             .disabled(model.file == nil)
-            if model.reference == .eardrum {
-                Text("Eardrum curves = Apple's data (assumed blocked ear-canal entrance) + a POPULATION-AVERAGE ear canal (Hammershøi & Møller 2008, Table II). Your own ear canal is not known, and the correction is rough above about 8 kHz. See Method & assumptions.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))

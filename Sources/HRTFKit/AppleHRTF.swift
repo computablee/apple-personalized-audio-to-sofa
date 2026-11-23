@@ -37,6 +37,7 @@ public struct AppleHRTF: Sendable {
     public var sourceFile: String
     public var blobKey: String
     /// Apple's stored "CTF" (UserData), 2 x K values in dB; likely the removed diffuse-field response.
+    /// Parsed for completeness only; nearly identical across people, so the app does not use it.
     public var ctf: [Double] = []
 
     public static func load(url: URL, blobKey: String = "HRIR_DFEQ") throws -> AppleHRTF {

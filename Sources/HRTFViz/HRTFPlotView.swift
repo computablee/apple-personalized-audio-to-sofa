@@ -293,10 +293,7 @@ public struct HRTFPlotView: View {
         var parts: [String] = []
         let s = result.options.smoothing
         parts.append(s > 0 ? "1/\(Int(s))-octave smoothing" : "no smoothing")
-        parts.append(result.options.effectiveAddCTF ? "Apple CTF added back (diffuse-field EQ undone)" : "as stored (diffuse-field equalized)")
-        parts.append(result.options.reference == .eardrum
-            ? "EARDRUM: + population-average ear canal (Hammershøi & Møller 2008), not your own"
-            : "referenced to ear-canal entrance (assumed)")
+        parts.append("as stored (diffuse-field equalized)")
         if result.options.mirror { parts.append("mirrored ear mapping") }
         return parts.joined(separator: " · ")
     }

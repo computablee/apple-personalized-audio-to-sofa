@@ -32,14 +32,8 @@ public enum HRTFAnalysis {
         /// Fractional-octave smoothing denominator (e.g. 12 = 1/12 octave); 0 = none.
         public var smoothing: Double = 12
         public var mirror = false
-        /// Add Apple's stored CTF back onto every curve (undoes the diffuse-field EQ, as interpreted).
-        public var addCTF = false
-        /// Measurement point. `.eardrum` implies the CTF is added back (it is meaningless on equalized data).
-        public var reference: ReferencePoint = .canalEntrance
         /// Optional extra direction, plotted as the "Custom" curve (nearest measurement).
         public var custom: Direction? = nil
-        /// CTF actually applied (always on for the eardrum reference).
-        public var effectiveAddCTF: Bool { addCTF || reference == .eardrum }
         public init() {}
     }
 
@@ -62,7 +56,6 @@ public enum HRTFAnalysis {
     public struct Result: Sendable {
         public let sourceFile: String
         public let curves: [Curve]
-        public let hasCTF: Bool
         public let options: Options
         /// Min/max level of the smoothed response over ALL measured directions (display band), so the
         /// y-axis can stay fixed whichever direction is shown.
@@ -74,7 +67,7 @@ public enum HRTFAnalysis {
             var o = options
             o.custom = direction
             let kept = curves.filter { $0.label != HRTFAnalysis.customLabel }
-            return Result(sourceFile: sourceFile, curves: kept + (direction == nil ? [] : custom), hasCTF: hasCTF,
+            return Result(sourceFile: sourceFile, curves: kept + (direction == nil ? [] : custom),
                           options: o, levelRange: levelRange)
         }
 
@@ -215,7 +208,6 @@ public enum HRTFAnalysis {
         }
 
         let grid = customGrid ?? displayGrid()
-        let nctf = h.ctf.count / 2
         var curves: [Curve] = []
         var rangeLo = Double.infinity, rangeHi = -Double.infinity
         for ear in 0..<2 {
@@ -229,7 +221,6 @@ public enum HRTFAnalysis {
                 specs.append((name, fft.power(h.ir[start..<(start + L)]), (az, h.coords[2 * m])))
             }
             var df_ = [Double](repeating: 0, count: fftSize / 2 + 1)
-            let offsets = (0...(fftSize / 2)).map { offsetDB(Double($0) * df, channel: c, h: h, o: o) }
             let kLo = Int((fMin / df).rounded(.down)), kHi = min(fftSize / 2, Int((fMax / df).rounded(.up)))
             for m in 0..<M {
                 let start = (m * C + c) * L
@@ -237,7 +228,7 @@ public enum HRTFAnalysis {
                 for k in 0..<p.count { df_[k] += w[m] * p[k] }
                 let sp = smooth(p, fraction: o.smoothing, df: df)
                 for k in kLo...kHi {
-                    let v = 10 * log10(sp[k] + 1e-20) + offsets[k]
+                    let v = 10 * log10(sp[k] + 1e-20)
                     if v > rangeHi { rangeHi = v }
                     if v < rangeLo { rangeLo = v }
                 }
@@ -254,14 +245,13 @@ public enum HRTFAnalysis {
         for c in curves {                 // include the diffuse field (and any interpolation overshoot)
             for p in c.points { rangeLo = min(rangeLo, p.level); rangeHi = max(rangeHi, p.level) }
         }
-        return Result(sourceFile: h.sourceFile, curves: curves, hasCTF: nctf > 0, options: o,
+        return Result(sourceFile: h.sourceFile, curves: curves, options: o,
                       levelRange: rangeLo...rangeHi)
     }
 
-    /// Power spectrum (bins 0…fftSize/2) -> smoothed dB points on `grid`, with the CTF / ear-canal options applied.
+    /// Power spectrum (bins 0…fftSize/2) -> smoothed dB points on `grid`.
     static func points(_ p: [Double], channel c: Int, h: AppleHRTF, o: Options, grid: [Double]) -> [Point] {
         let df = h.sampleRate / Double(fftSize)
-        let nctf = h.ctf.count / 2
         let s = smooth(p, fraction: o.smoothing, df: df)
         let db = s.map { 10 * log10($0 + 1e-20) }
         var pts: [Point] = []
@@ -269,30 +259,10 @@ public enum HRTFAnalysis {
         for (i, f) in grid.enumerated() {
             let pos = f / df
             let i0 = Int(pos.rounded(.down)), t = pos - Double(i0)
-            let v = db[i0] * (1 - t) + db[i0 + 1] * t + offsetDB(f, channel: c, h: h, o: o)
+            let v = db[i0] * (1 - t) + db[i0 + 1] * t
             pts.append(Point(id: i, frequency: f, level: v))
         }
         return pts
-    }
-
-    /// Direction-independent offset at f: Apple's CTF (if added back) and the ear-canal correction (if eardrum).
-    static func offsetDB(_ f: Double, channel c: Int, h: AppleHRTF, o: Options) -> Double {
-        var v = 0.0
-        let nctf = h.ctf.count / 2
-        if o.effectiveAddCTF && nctf > 0 {
-            let step = h.sampleRate / 2 / Double(nctf)
-            let q = f / step
-            let j = min(Int(q.rounded(.down)), nctf - 1), u = q - Double(j)
-            let base = c * nctf
-            if j >= nctf - 1 {
-                v += h.ctf[base + nctf - 1]
-            } else {
-                let c0 = h.ctf[base + j], c1 = h.ctf[base + j + 1]
-                v += c0 * (1 - u) + c1 * u
-            }
-        }
-        if o.reference == .eardrum { v += EarCanalCorrection.dB(at: f) }
-        return v
     }
 
     /// Index of the measurement nearest (largest dot product) to a SOFA-convention direction.
@@ -331,42 +301,5 @@ public enum HRTFAnalysis {
                              points: points(p, channel: c, h: h, o: o, grid: grid)))
         }
         return out
-    }
-
-    // MARK: - Measurement-file export (frequency<TAB>dB, 1/48 octave from 20 Hz, like REW/Squig .txt)
-
-    /// 480 points, 20 Hz * 2^(i/48), i = 0..<480 (20 Hz ... 20.19 kHz).
-    public static func measurementGrid() -> [Double] {
-        (0..<480).map { 20.0 * pow(2.0, Double($0) / 48.0) }
-    }
-
-    static func numberString(_ v: Double) -> String {
-        if v == v.rounded(), abs(v) < 1e15 { return String(Int64(v)) }
-        return "\(v)"
-    }
-
-    /// No header, one "frequency\tlevel" per line, LF, no trailing newline.
-    public static func measurementText(_ points: [Point]) -> String {
-        points.map { numberString($0.frequency) + "\t" + numberString($0.level) }.joined(separator: "\n")
-    }
-
-    /// Diffuse-field curves on the measurement grid: (file suffix, text) for left, right and
-    /// the power average of both ears. Follows `options` (smoothing, mirror, CTF).
-    public static func diffuseFieldMeasurements(_ h: AppleHRTF, options: Options) -> [(suffix: String, text: String)] {
-        let r = analyze(h, options: options, grid: measurementGrid())
-        guard let l = r.curves.first(where: { $0.ear == 0 && $0.isDiffuse }),
-              let rr = r.curves.first(where: { $0.ear == 1 && $0.isDiffuse }) else { return [] }
-        var avg: [Point] = []
-        for i in 0..<l.points.count {
-            let pl = pow(10.0, l.points[i].level / 10), pr = pow(10.0, rr.points[i].level / 10)
-            avg.append(Point(id: i, frequency: l.points[i].frequency, level: 10 * log10((pl + pr) / 2)))
-        }
-        return [("L", measurementText(l.points)), ("R", measurementText(rr.points)), ("LR-avg", measurementText(avg))]
-    }
-
-    /// File-name stem for diffuse-field exports, e.g. "<name>-DFHRTF" or "<name>-DF-asstored".
-    public static func diffuseFieldStem(_ base: String, options: Options) -> String {
-        base + (options.effectiveAddCTF ? "-DFHRTF" : "-DF-asstored")
-            + (options.reference == .eardrum ? "-eardrum" : "") + (options.mirror ? "-mirrored" : "")
     }
 }
