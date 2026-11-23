@@ -139,47 +139,56 @@ consistent (IR correlation ≈ 0.986, delays within ≈ 0.17 samples RMS).
 
 ## How personal is Apple's personalized HRTF?
 
-This compares four scans of one listener (A), one profile each from three more listeners (B, C and
-D), and Apple's generic HRTF that ships with macOS (`HRIR_General.ir` in AudioDSP.component). The
-profiles were made on four different iPhones, from 2024 to 2026. The comparison suggests
-Personalized Spatial Audio makes real but modest changes.
+This compares 10 profiles from four listeners and Apple's generic HRTF that ships with macOS
+(`HRIR_General.ir` in AudioDSP.component). Listener A has four scans, B three, C two and D one. The
+profiles were made on five different iPhones, from 2024 to 2026. The short version: Personalized
+Spatial Audio reliably personalizes head size (the ITD). Its spectral personalization is small, only
+slightly larger than the difference between two scans of the same person.
 
 **Most of every profile is a shared base head.** Each profile's directional curves (each direction
-relative to that profile's own diffuse field) sit 2.7–3.1 dB RMS from Apple's generic head. But all
-four move away from it in much the same way: the deviations are 66–82% correlated, and about 82% of
-their energy is common to all four listeners. What's individual on top of that base is about
-1.0–1.5 dB RMS. Listeners differ from each other by 1.6–2.6 dB RMS (2.0 dB on average), while repeat
-scans of listener A differ by 1.0–1.6 dB (1.2 dB on average). So the difference between two people
-is only about 1.5–2 times the scan-to-scan noise. It's largest above 5 kHz, where the pinna shapes
-the response.
+relative to that profile's own diffuse field) sit 2.9–3.1 dB RMS from Apple's generic head. But all
+four listeners move away from it in much the same way. Averaging each listener's scans, their
+deviations from the generic head are 77–90% correlated, and about 89% of the deviation energy is
+common to all four. What's individual on top of that shared base is about 0.7–1.2 dB RMS.
 
-![RMS difference of the directional curves over the whole sphere, by frequency: listener vs Apple's generic HRTF is highest at about 2.5-3.5 dB, listener vs listener is 0.9-2.6 dB, and repeat scans of the same listener are lowest at 0.6-1.7 dB](Figures/directional-differences.png)
+**Spectral differences between people are barely above scan noise.** Different listeners differ by
+1.6–2.2 dB RMS (1.85 dB on average). Repeat scans of the same listener differ by 0.9–2.1 dB (1.3 dB on
+average), so the two ranges overlap. The largest repeat-scan gap is listener B's 2024 profile against
+the two made in 2026 (1.8–2.1 dB). Those were made on a different iPhone two years apart, so it isn't
+possible to tell whether the scan or Apple's processing changed.
 
-**The clearest individual features are the pinna notch and head size.** The first pinna notch is
-the main cue for elevation and front/back. In front and at ±30°, it falls at 6.8–7.1 kHz for listener
-B, 7.6–8.4 kHz for C, 8.3–9.8 kHz for D and 8.2–10.1 kHz across A's four scans. For the generic head it
-falls at 6.3–7.5 kHz. A's scans move it by up to about 1.5 kHz, so only differences larger than that,
-such as A or D against B, clearly stand out from scan noise. The ITD at 90° ranges from 629 to 703 µs
-across the four listeners (about 11%), and is 721 µs for the generic head.
+![RMS difference of the directional curves over the whole sphere, by frequency: profiles vs Apple's generic HRTF are at about 2.5-3.6 dB; different listeners are at 0.9-2.3 dB, only slightly above repeat scans of the same listener at 0.7-1.8 dB](Figures/directional-differences.png)
 
-![Straight ahead, left ear, one panel per listener, each profile relative to its own diffuse field and compared with Apple's generic head: every listener has a larger 2-4 kHz bump than the generic head, and the 6-10 kHz notch sits at a different frequency for each](Figures/front-direction.png)
+![Straight ahead, left ear, one panel per listener with all of that listener's scans, each relative to its own diffuse field and compared with Apple's generic head: every profile has a larger 2-4 kHz bump and a deeper 6-10 kHz notch than the generic head, and repeat scans vary visibly](Figures/front-direction.png)
 
-![First pinna notch frequency, left ear, in front and at 30° left and right, one row per listener: listener A's four scans spread over 8.2-10.1 kHz, B sits at 6.8-7.1 kHz, C at 7.6-8.4 kHz, D at 8.3-9.8 kHz, and Apple's generic head at 6.3-7.5 kHz](Figures/pinna-notch.png)
+**The pinna notch is not reliably individual.** The first pinna notch is the main cue for elevation and
+front/back. Repeat scans move it by up to about 1.5 kHz: listener C's front notch is at 7.9 kHz in one
+scan and 9.4 kHz in the other. That's about as much as it differs between listeners. Across all profiles
+it falls at 6.5–10.1 kHz in front and at ±30°, against 6.3–7.5 kHz for the generic head.
 
-**A different HRTF dataset is much further away.** At its 27 directions, an unrelated third-party
-HRTF (3D Sound Labs, as shipped with VLC) differs from each profile by 4.4–4.6 dB RMS. The listeners
-differ from each other by 1.6–2.6 dB at the same directions. That suggests the per-person variation in
-Apple's profiles is smaller than real head-to-head differences. But the datasets were measured and
-processed differently, and only four people were compared.
+![First pinna notch frequency, left ear, in front and at 30° left and right, one row per listener: repeat scans of each listener spread over 1-2 kHz, overlapping the other listeners; Apple's generic head sits lower, at 6.3-7.5 kHz](Figures/pinna-notch.png)
+
+**Head size is the clearly individual feature.** The ITD at 90° varies by at most 22 µs between one
+listener's scans, but ranges from about 625 to 711 µs across listeners. For example, listener A is at
+700–711 µs, while B and C are at 625–647 µs. The generic head is at 721 µs.
+
+![ITD at 90 degrees per scan: listener A's scans cluster at 700-711 µs, B's at 625-647 µs, C's at 629-632 µs, D at 657 µs, and Apple's generic head at 721 µs](Figures/itd-head-size.png)
+
+**A different HRTF dataset is much further away.** At its 27 directions, an unrelated third-party HRTF
+(3D Sound Labs, as shipped with VLC) differs from the profiles by 4.4–4.6 dB RMS. Listeners differ from
+each other by 1.7–2.2 dB at the same directions. That suggests Apple's per-person spectral variation is
+much smaller than real head-to-head differences. But the datasets were measured and processed
+differently, and only four people were compared.
 
 **There is no personal diffuse-field response.** The stored HRIRs are diffuse-field equalized, so they
 carry no absolute diffuse-field response. The only absolute curve in the file is the 64-point CTF. It
-agrees within 1.8 dB across all four listeners and all scans, and peaks at 7.5–8.0 dB near 3.4 kHz for
-everyone. Apple's generic HRTFs on macOS are diffuse-field equalized too and have no CTF at all. That's
-why this tool doesn't export a diffuse-field HRTF: it would effectively be a population curve, not a
-personal one. A personal diffuse-field or eardrum target needs a real measurement, such as an
-audiologist's real-ear (REUR/REUG) measurement or in-ear microphones. For BRIR use this matters less:
-tools like ASH Toolset diffuse-field-calibrate each dataset anyway, so what reaches the BRIR is exactly
-the personal directional and timing part described above.
+agrees within 1.4 dB between one listener's scans and within 1.8 dB across all listeners, and peaks at
+7.0–8.0 dB near 3.4–3.75 kHz for everyone. Apple's generic HRTFs on macOS are diffuse-field equalized too
+and have no CTF at all. That's why this tool doesn't export a diffuse-field HRTF: it would effectively
+be a population curve, not a personal one. A personal diffuse-field or eardrum target needs a real
+measurement, such as an audiologist's real-ear (REUR/REUG) measurement or in-ear microphones. For BRIR
+use this matters less: tools like ASH Toolset diffuse-field-calibrate each dataset anyway, so what
+reaches the BRIR is the shared base head plus your ITD and the small spectral differences described
+above.
 
-![Apple's stored CTF, left ear, for listener A's four scans and listeners B, C and D: the curves overlap almost completely, peaking near 3.4 kHz and rolling off above 5 kHz](Figures/ctf-across-listeners.png)
+![Apple's stored CTF, left ear, for listener A's four scans and the six scans of listeners B, C and D: the curves overlap almost completely, peaking near 3.4 kHz and rolling off above 5 kHz](Figures/ctf-across-listeners.png)
