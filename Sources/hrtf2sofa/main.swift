@@ -15,6 +15,8 @@ usage: hrtf2sofa [options] <file.dat>...
                        as stored, with Apple's CTF added back, and at the eardrum
                        (population-average ear-canal correction; see *-assumptions.md)
   --smoothing N        1/N-octave smoothing for plots (default 12, 0 = none)
+  --custom AZ,EL       add a custom-direction curve to the plots (SOFA convention:
+                       azimuth 0 = front, 90 = left, 270 = right; elevation -90..90)
 """
 
 @MainActor
@@ -23,6 +25,7 @@ func runCLI() -> Int32 {
     var outdir: URL? = nil
     var plotDir: URL? = nil
     var smoothing = 12.0
+    var custom: HRTFAnalysis.Direction? = nil
     var inputs: [URL] = []
     var args = Array(CommandLine.arguments.dropFirst())
 
@@ -47,6 +50,10 @@ func runCLI() -> Int32 {
         case "--listener": opts.listenerName = next()
         case "--date": opts.date = next()
         case "--plot": plotDir = URL(fileURLWithPath: next(), isDirectory: true)
+        case "--custom":
+            let parts = next().split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+            guard parts.count == 2 else { fail("bad --custom (expected AZ,EL)") }
+            custom = HRTFAnalysis.Direction(azimuth: parts[0], elevation: parts[1])
         case "--smoothing":
             guard let s = Double(next()) else { fail("bad --smoothing") }
             smoothing = s
@@ -78,6 +85,7 @@ func runCLI() -> Int32 {
                     ao.mirror = opts.mirror
                     ao.addCTF = addCTF
                     ao.reference = reference
+                    ao.custom = custom
                     let r = HRTFAnalysis.analyze(h, options: ao)
                     let stem = base + suffix
                     try r.csv().write(to: pd.appendingPathComponent(stem + ".csv"), atomically: true, encoding: .utf8)

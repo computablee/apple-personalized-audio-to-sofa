@@ -15,7 +15,7 @@ struct HRTFToSOFAApp: App {
     var body: some Scene {
         WindowGroup("HRTF → SOFA") {
             RootView()
-                .frame(minWidth: 1040, minHeight: 680)
+                .frame(minWidth: 1260, minHeight: 760)
         }
         .windowResizability(.contentMinSize)
     }
@@ -230,6 +230,33 @@ final class VizModel: ObservableObject {
         }
     }
     @Published var showAssumptions = false
+    @Published var customEnabled = false { didSet { applyCustom() } }
+    /// SOFA convention: 0° front, 90° left, 180° behind, 270° right (negative values wrap, e.g. −90° = right).
+    @Published var customAzimuth: Double = 135 { didSet { if customEnabled { applyCustom() } } }
+    @Published var customElevation: Double = 0 { didSet { if customEnabled { applyCustom() } } }
+    /// Result without the custom curve (recomputed only when settings change).
+    private var baseResult: HRTFAnalysis.Result? = nil
+
+    var customDirection: HRTFAnalysis.Direction {
+        HRTFAnalysis.Direction(azimuth: customAzimuth, elevation: customElevation)
+    }
+
+    var customMatched: (azimuth: Double, elevation: Double)? {
+        result?.curves.first(where: { $0.label == HRTFAnalysis.customLabel })?.matched
+    }
+
+    /// Adds/updates/removes the custom curves on top of the base result: two FFTs, fast enough for live dragging.
+    func applyCustom() {
+        guard let base = baseResult, let h = hrtf else { return }
+        if customEnabled {
+            var o = base.options
+            o.custom = nil
+            let curves = HRTFAnalysis.customCurves(h, options: o, direction: customDirection)
+            result = base.replacingCustom(curves, direction: customDirection)
+        } else {
+            result = base.replacingCustom([], direction: nil)
+        }
+    }
 
     var options: HRTFAnalysis.Options {
         var o = HRTFAnalysis.Options()
@@ -237,6 +264,7 @@ final class VizModel: ObservableObject {
         o.mirror = mirror
         o.addCTF = addCTF
         o.reference = reference
+        if customEnabled { o.custom = HRTFAnalysis.Direction(azimuth: customAzimuth, elevation: customElevation) }
         return o
     }
     @Published var result: HRTFAnalysis.Result? = nil
@@ -260,6 +288,7 @@ final class VizModel: ObservableObject {
         error = nil
         result = nil
         hrtf = nil
+        baseResult = nil
         busy = true
         generation += 1
         let gen = generation
@@ -279,15 +308,17 @@ final class VizModel: ObservableObject {
 
     func recompute() {
         guard let h = hrtf else { return }
-        let o = options
+        var o = options
+        o.custom = nil                    // the custom curve is added by applyCustom()
         generation += 1
         let gen = generation
         busy = true
         Task {
             let r = await Task.detached(priority: .userInitiated) { HRTFAnalysis.analyze(h, options: o) }.value
             if gen == generation {
-                result = r
+                baseResult = r
                 busy = false
+                applyCustom()
             }
         }
     }
@@ -403,6 +434,19 @@ struct VisualizeView: View {
                     }
                 Spacer()
             }
+            HStack(spacing: 10) {
+                Toggle("Custom direction", isOn: $model.customEnabled)
+                Text("Azimuth")
+                TextField("", value: $model.customAzimuth, format: .number).frame(width: 60)
+                Text("°  Elevation")
+                TextField("", value: $model.customElevation, format: .number).frame(width: 60)
+                Text("°")
+                Text("Drag on the heads at the left, or type: azimuth 0° front, 90° left, 180° behind, 270° (or −90°) right; elevation −90° below to +90° above. Uses the nearest measured direction.")
+                    .font(.caption).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            .disabled(model.file == nil)
             if model.reference == .eardrum {
                 Text("Eardrum curves = Apple's data (assumed blocked ear-canal entrance) + a POPULATION-AVERAGE ear canal (Hammershøi & Møller 2008, Table II). Your own ear canal is not known, and the correction is rough above about 8 kHz. See Method & assumptions.")
                     .font(.caption)
@@ -414,7 +458,19 @@ struct VisualizeView: View {
                     .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
                     .foregroundColor(model.dropTargeted ? .accentColor : .secondary.opacity(model.result == nil ? 1 : 0))
                 if let r = model.result {
-                    HRTFPlotView(result: r, hover: model.hover).padding(12)
+                    HStack(alignment: .top, spacing: 8) {
+                        DirectionPicker(azimuth: $model.customAzimuth, elevation: $model.customElevation,
+                                        matched: model.customEnabled ? model.customMatched : nil,
+                                        onBegin: { if !model.customEnabled { model.customEnabled = true } })
+                            .frame(width: 200)
+                            .padding(12)
+                            .opacity(model.customEnabled ? 1 : 0.6)
+                        ScrollView {
+                            HRTFPlotView(result: r, hover: model.hover)
+                                .padding(12)
+                                .frame(height: HRTFPlotView.preferredHeight(for: r))
+                        }
+                    }
                 } else if model.busy {
                     ProgressView("Analyzing…")
                 } else {

@@ -10,9 +10,23 @@ public enum HRTFAnalysis {
 
     /// (label, SOFA azimuth (counter-clockwise, 90 = left), elevation)
     public static let directions: [(String, Double, Double)] = [
-        ("Front", 0, 0), ("45° left", 45, 0), ("45° down", 0, -45), ("45° up", 0, 45),
+        ("Front", 0, 0), ("45° left", 45, 0), ("45° right", 315, 0), ("45° down", 0, -45), ("45° up", 0, 45),
     ]
     public static let diffuseLabel = "Diffuse field"
+    public static let customLabel = "Custom"
+
+    /// A requested direction in SOFA convention: azimuth counter-clockwise from the front
+    /// (90° = left, 180° = behind, 270° = right), elevation from −90° (below) to +90° (above).
+    public struct Direction: Sendable, Equatable {
+        public var azimuth: Double
+        public var elevation: Double
+        public init(azimuth: Double, elevation: Double) {
+            var a = azimuth.truncatingRemainder(dividingBy: 360)
+            if a < 0 { a += 360 }
+            self.azimuth = a
+            self.elevation = max(-90, min(90, elevation))
+        }
+    }
 
     public struct Options: Sendable {
         /// Fractional-octave smoothing denominator (e.g. 12 = 1/12 octave); 0 = none.
@@ -22,6 +36,8 @@ public enum HRTFAnalysis {
         public var addCTF = false
         /// Measurement point. `.eardrum` implies the CTF is added back (it is meaningless on equalized data).
         public var reference: ReferencePoint = .canalEntrance
+        /// Optional extra direction, plotted as the "Custom" curve (nearest measurement).
+        public var custom: Direction? = nil
         /// CTF actually applied (always on for the eardrum reference).
         public var effectiveAddCTF: Bool { addCTF || reference == .eardrum }
         public init() {}
@@ -48,7 +64,19 @@ public enum HRTFAnalysis {
         public let curves: [Curve]
         public let hasCTF: Bool
         public let options: Options
+        /// Min/max level of the smoothed response over ALL measured directions (display band), so the
+        /// y-axis can stay fixed whichever direction is shown.
+        public let levelRange: ClosedRange<Double>
         public func curves(ear: Int) -> [Curve] { curves.filter { $0.ear == ear } }
+
+        /// Same result with the "Custom" curves replaced (or removed when `direction` is nil).
+        public func replacingCustom(_ custom: [Curve], direction: Direction?) -> Result {
+            var o = options
+            o.custom = direction
+            let kept = curves.filter { $0.label != HRTFAnalysis.customLabel }
+            return Result(sourceFile: sourceFile, curves: kept + (direction == nil ? [] : custom), hasCTF: hasCTF,
+                          options: o, levelRange: levelRange)
+        }
 
         public func csv() -> String {
             var header = ["frequency_hz"]
@@ -173,7 +201,9 @@ public enum HRTFAnalysis {
         for v in w { wsum += v }
 
         // nearest measurement for each requested direction
-        let picks: [(String, Int)] = directions.map { (name, a, e) in
+        var wanted = directions
+        if let c = o.custom { wanted.append((customLabel, c.azimuth, c.elevation)) }
+        let picks: [(String, Int)] = wanted.map { (name, a, e) in
             let er = e * .pi / 180, ar = a * .pi / 180
             let tx = cos(er) * cos(ar), ty = cos(er) * sin(ar), tz = sin(er)
             var best = 0, bestDot = -2.0
@@ -187,6 +217,7 @@ public enum HRTFAnalysis {
         let grid = customGrid ?? displayGrid()
         let nctf = h.ctf.count / 2
         var curves: [Curve] = []
+        var rangeLo = Double.infinity, rangeHi = -Double.infinity
         for ear in 0..<2 {
             let c = chan[ear]
             var specs: [(String, [Double], (Double, Double)?)] = []
@@ -198,43 +229,108 @@ public enum HRTFAnalysis {
                 specs.append((name, fft.power(h.ir[start..<(start + L)]), (az, h.coords[2 * m])))
             }
             var df_ = [Double](repeating: 0, count: fftSize / 2 + 1)
+            let offsets = (0...(fftSize / 2)).map { offsetDB(Double($0) * df, channel: c, h: h, o: o) }
+            let kLo = Int((fMin / df).rounded(.down)), kHi = min(fftSize / 2, Int((fMax / df).rounded(.up)))
             for m in 0..<M {
                 let start = (m * C + c) * L
                 let p = fft.power(h.ir[start..<(start + L)])
                 for k in 0..<p.count { df_[k] += w[m] * p[k] }
+                let sp = smooth(p, fraction: o.smoothing, df: df)
+                for k in kLo...kHi {
+                    let v = 10 * log10(sp[k] + 1e-20) + offsets[k]
+                    if v > rangeHi { rangeHi = v }
+                    if v < rangeLo { rangeLo = v }
+                }
             }
             for k in 0..<df_.count { df_[k] /= wsum }
             specs.append((diffuseLabel, df_, nil))
 
             for (name, p, matched) in specs {
-                let s = smooth(p, fraction: o.smoothing, df: df)
-                let db = s.map { 10 * log10($0 + 1e-20) }
-                var pts: [Point] = []
-                pts.reserveCapacity(grid.count)
-                for (i, f) in grid.enumerated() {
-                    let pos = f / df
-                    let i0 = Int(pos.rounded(.down)), t = pos - Double(i0)
-                    var v = db[i0] * (1 - t) + db[i0 + 1] * t
-                    if o.effectiveAddCTF && nctf > 0 {
-                        let step = h.sampleRate / 2 / Double(nctf)
-                        let q = f / step
-                        let j = min(Int(q.rounded(.down)), nctf - 1), u = q - Double(j)
-                        let base = c * nctf
-                        if j >= nctf - 1 {
-                            v += h.ctf[base + nctf - 1]
-                        } else {
-                            let c0 = h.ctf[base + j], c1 = h.ctf[base + j + 1]
-                            v += c0 * (1 - u) + c1 * u
-                        }
-                    }
-                    if o.reference == .eardrum { v += EarCanalCorrection.dB(at: f) }
-                    pts.append(Point(id: i, frequency: f, level: v))
-                }
+                let pts = points(p, channel: c, h: h, o: o, grid: grid)
                 curves.append(Curve(label: name, ear: ear, isDiffuse: matched == nil,
                                     matched: matched.map { (azimuth: $0.0, elevation: $0.1) }, points: pts))
             }
         }
-        return Result(sourceFile: h.sourceFile, curves: curves, hasCTF: nctf > 0, options: o)
+        for c in curves {                 // include the diffuse field (and any interpolation overshoot)
+            for p in c.points { rangeLo = min(rangeLo, p.level); rangeHi = max(rangeHi, p.level) }
+        }
+        return Result(sourceFile: h.sourceFile, curves: curves, hasCTF: nctf > 0, options: o,
+                      levelRange: rangeLo...rangeHi)
+    }
+
+    /// Power spectrum (bins 0…fftSize/2) -> smoothed dB points on `grid`, with the CTF / ear-canal options applied.
+    static func points(_ p: [Double], channel c: Int, h: AppleHRTF, o: Options, grid: [Double]) -> [Point] {
+        let df = h.sampleRate / Double(fftSize)
+        let nctf = h.ctf.count / 2
+        let s = smooth(p, fraction: o.smoothing, df: df)
+        let db = s.map { 10 * log10($0 + 1e-20) }
+        var pts: [Point] = []
+        pts.reserveCapacity(grid.count)
+        for (i, f) in grid.enumerated() {
+            let pos = f / df
+            let i0 = Int(pos.rounded(.down)), t = pos - Double(i0)
+            let v = db[i0] * (1 - t) + db[i0 + 1] * t + offsetDB(f, channel: c, h: h, o: o)
+            pts.append(Point(id: i, frequency: f, level: v))
+        }
+        return pts
+    }
+
+    /// Direction-independent offset at f: Apple's CTF (if added back) and the ear-canal correction (if eardrum).
+    static func offsetDB(_ f: Double, channel c: Int, h: AppleHRTF, o: Options) -> Double {
+        var v = 0.0
+        let nctf = h.ctf.count / 2
+        if o.effectiveAddCTF && nctf > 0 {
+            let step = h.sampleRate / 2 / Double(nctf)
+            let q = f / step
+            let j = min(Int(q.rounded(.down)), nctf - 1), u = q - Double(j)
+            let base = c * nctf
+            if j >= nctf - 1 {
+                v += h.ctf[base + nctf - 1]
+            } else {
+                let c0 = h.ctf[base + j], c1 = h.ctf[base + j + 1]
+                v += c0 * (1 - u) + c1 * u
+            }
+        }
+        if o.reference == .eardrum { v += EarCanalCorrection.dB(at: f) }
+        return v
+    }
+
+    /// Index of the measurement nearest (largest dot product) to a SOFA-convention direction.
+    public static func nearestMeasurement(_ h: AppleHRTF, direction d: Direction, mirror: Bool) -> Int {
+        let er = d.elevation * .pi / 180, ar = d.azimuth * .pi / 180
+        let tx = cos(er) * cos(ar), ty = cos(er) * sin(ar), tz = sin(er)
+        var best = 0, bestDot = -2.0
+        for m in 0..<h.numMeasurements {
+            let e = h.coords[2 * m], azA = h.coords[2 * m + 1]
+            let az = mirror ? azA : 360.0 - azA
+            let me = e * .pi / 180, ma = az * .pi / 180
+            let dot = cos(me) * cos(ma) * tx + cos(me) * sin(ma) * ty + sin(me) * tz
+            if dot > bestDot { bestDot = dot; best = m }
+        }
+        return best
+    }
+
+    /// Just the two "Custom" curves (left, right) for one direction: two FFTs, cheap enough for live dragging.
+    public static func customCurves(_ h: AppleHRTF, options o: Options, direction d: Direction,
+                                    grid customGrid: [Double]? = nil) -> [Curve] {
+        let C = h.numChannels, L = h.filterLength
+        let fft = FFT(fftSize)
+        let chan = o.mirror ? [1, 0] : [0, 1]
+        let grid = customGrid ?? displayGrid()
+        let m = nearestMeasurement(h, direction: d, mirror: o.mirror)
+        let azA = h.coords[2 * m + 1]
+        var az = o.mirror ? azA : 360.0 - azA
+        az = az.truncatingRemainder(dividingBy: 360); if az < 0 { az += 360 }
+        var out: [Curve] = []
+        for ear in 0..<2 {
+            let c = chan[ear]
+            let start = (m * C + c) * L
+            let p = fft.power(h.ir[start..<(start + L)])
+            out.append(Curve(label: customLabel, ear: ear, isDiffuse: false,
+                             matched: (azimuth: az, elevation: h.coords[2 * m]),
+                             points: points(p, channel: c, h: h, o: o, grid: grid)))
+        }
+        return out
     }
 
     // MARK: - Measurement-file export (frequency<TAB>dB, 1/48 octave from 20 Hz, like REW/Squig .txt)

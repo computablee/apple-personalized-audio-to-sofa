@@ -54,15 +54,34 @@ netCDF (`ncdump`), and writes `validate.log`. It needs `brew install libmysofa n
 
 ## Visualizer
 
-The app's **Visualize** tab plots the magnitude response at the left and right ears for five curves:
-front (0°, 0°), 45° left (az 45°), 45° down (el −45°), 45° up (el +45°), and the **diffuse field**.
-The diffuse field is the solid-angle-weighted power average over all 2842 directions (each
-measurement is weighted by its 5° latitude-band area divided by the points in its ring).
-It has a hover crosshair synced across both ears with a value readout, smoothing from none to
-1/3 octave, and PNG/CSV export.
-`hrtf2sofa … --plot DIR [--smoothing N]` writes the same plots and CSVs from the command line.
+The app's **Visualize** tab plots the magnitude response at the left and right ears. For each ear there
+are two panels:
 
-![Visualize tab with "Add back Apple's CTF" on and the eardrum reference point selected: left- and right-ear magnitude responses for front, 45° left, 45° down, 45° up and the diffuse field](Screenshots/visualize-tab-eardrum.png)
+- **Horizontal plane:** front (az 0°), 45° left (az 45°) and 45° right (az 315°)
+- **Median plane:** front, 45° up (el +45°) and 45° down (el −45°)
+
+Each panel also shows the **diffuse field** (dashed). This is the solid-angle-weighted power average over all
+2842 directions; each measurement is weighted by its 5° latitude-band area divided by the points in its ring.
+The y-axis range is fixed per file and setting, and it covers every measured direction.
+
+- **Highlight a curve:** click a line or its legend entry to highlight it and gray out the others. Click it
+  again, click empty space, or use **Show all** to reset.
+- **Read values:** hover for a crosshair, synced across both ears, with a value readout.
+- **Smoothing** goes from none to 1/3 octave, and the plots export as PNG and CSV.
+- `hrtf2sofa … --plot DIR [--smoothing N] [--custom AZ,EL]` writes the same plots and CSVs from the
+  command line.
+
+![Visualize tab with "Add back Apple's CTF" on and the eardrum reference point selected: horizontal-plane (front, 45° left, 45° right) and median-plane (front, 45° up, 45° down) magnitude responses for each ear, with the diffuse field, and the direction picker on the left](Screenshots/visualize-tab.png)
+
+### Direction picker
+
+To see any other direction, drag around the **top view** of the head to set the azimuth, and along the
+**side view** arc to set the elevation, or type both values. A **Custom direction** panel at the top updates
+live while you drag. It shows the nearest measured direction (a hollow ring in the picker) next to the
+requested one, plus a plain-language description such as "behind, right, below". Azimuth uses the SOFA
+convention: 0° is front, 90° left, 180° behind and 270° (or −90°) right.
+
+![Dragging the direction picker: the Custom direction panel updates in real time as the azimuth and elevation change](Screenshots/visualize-direction-picker.gif)
 
 - As stored, the data is **diffuse-field equalized**: the diffuse-field curve is within about 0–3 dB of flat.
 - **"Add back Apple's CTF"** adds the per-ear `CTF` from the file's metadata (2 × 64 values in dB
